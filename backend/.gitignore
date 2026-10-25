@@ -4,7 +4,7 @@ node_modules
 !.env.example
 dist
 
-src/app/generated/
+src/generated/
 generated/
 
 # AI / Agent tools (from your folder structure)
