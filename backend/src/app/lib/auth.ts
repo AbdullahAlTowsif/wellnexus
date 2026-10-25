@@ -39,7 +39,11 @@ export const auth = betterAuth({
                 defaultValue: null
             }
         }
-    }
+    },
+    // trustedOrigins: [process.env.BEETER_AUTH_URL || "http://localhost:5000"],
+    // advanced: {
+    //     disableCSRFCheck: true,
+    // }
 });
 
 
