@@ -8,8 +8,8 @@ interface IRegisterPatientPayload {
     password: string;
 }
 
-const registerPatient = async(payload: IRegisterPatientPayload) => {
-    const {name, email, password} = payload;
+const registerPatient = async (payload: IRegisterPatientPayload) => {
+    const { name, email, password } = payload;
 
     const data = await auth.api.signUpEmail({
         body: {
@@ -19,25 +19,35 @@ const registerPatient = async(payload: IRegisterPatientPayload) => {
         }
     })
 
-    if(!data.user) {
+    if (!data.user) {
         throw new Error("Failed to register patient");
     }
 
-    const patient = await prisma.$transaction(async (tx) => {
-        const patientTx = await tx.patient.create({
-            data: {
-                userId: data.user.id,
-                name: payload.name,
-                email: payload.email,
-            }
+    try {
+        const patient = await prisma.$transaction(async (tx) => {
+            const patientTx = await tx.patient.create({
+                data: {
+                    userId: data.user.id,
+                    name: payload.name,
+                    email: payload.email,
+                }
+            })
+
+            return patientTx;
         })
 
-        return patientTx;
-    })
-
-    return {
-        ...data,
-        patient,
+        return {
+            ...data,
+            patient,
+        }
+    } catch (error) {
+        console.log("Transaction error: ", error);
+        await prisma.user.delete({
+            where: {
+                id: data.user.id
+            }
+        })
+        throw error;
     }
 }
 
@@ -47,7 +57,7 @@ interface ILoginUserPayload {
 }
 
 const loginUser = async (payload: ILoginUserPayload) => {
-    const {email, password} = payload;
+    const { email, password } = payload;
 
     const data = await auth.api.signInEmail({
         body: {
@@ -56,11 +66,11 @@ const loginUser = async (payload: ILoginUserPayload) => {
         }
     })
 
-    if(data.user.status === UserStatus.BLOCKED) {
+    if (data.user.status === UserStatus.BLOCKED) {
         throw new Error("User is Blocked!");
     }
 
-    if(data.user.isDeleted || data.user.status === UserStatus.DELETED) {
+    if (data.user.isDeleted || data.user.status === UserStatus.DELETED) {
         throw new Error("User is deleted!");
     }
 
