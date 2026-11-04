@@ -8,8 +8,12 @@ import { auth } from './app/lib/auth';
 import path from 'path';
 import cors from "cors";
 import { envVars } from './app/config/env';
+import qs from 'qs';
 
 const app: Application = express();
+
+// Set the query parser to use qs for parsing query strings
+app.set("query parser", (str: string) => qs.parse(str));
 
 // ejs setup
 app.set("view engine", "ejs");
@@ -22,6 +26,7 @@ app.use(cors({
     allowedHeaders: ["Content-Type", "Authorization", "Set-Cookie"],
 }));
 
+// Use the toNodeHandler middleware to handle authentication routes (better-auth)
 app.use("/api/auth", toNodeHandler(auth));
 
 // Enable URL-encoded form data parsing
