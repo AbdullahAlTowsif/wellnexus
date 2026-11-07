@@ -77,6 +77,7 @@ export const auth = betterAuth({
         }
     },
 
+    // kokhon kokhon user er email verify korte hobe, and email verification er age ki ki check korte hobe, etc.
     plugins: [
         bearer(),
         emailOTP({
@@ -88,6 +89,16 @@ export const auth = betterAuth({
                             email,
                         }
                     })
+
+                    if (!user) {
+                        console.error(`User with email ${email} not found. Cannot send verification OTP.`);
+                        return;
+                    }
+
+                    if (user && user.role === Role.SUPER_ADMIN) {
+                        console.log(`User with email ${email} is a super admin. Skipping sending verification OTP.`);
+                        return;
+                    }
 
                     if (user && !user.emailVerified) {
                         sendEmail({
@@ -134,7 +145,6 @@ export const auth = betterAuth({
         }
     },
 
-    // for social login | below all parts
     redirectURLs: {
         signIn: `${envVars.BETTER_AUTH_URL}/api/v1/auth/google/success`,
     },
@@ -165,5 +175,3 @@ export const auth = betterAuth({
     }
 
 });
-
-// npx auth@latest generate --output ./prisma/schema/auth.prisma --config ./src/app/lib/auth.ts
