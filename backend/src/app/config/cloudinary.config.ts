@@ -42,8 +42,8 @@ export const uploadFileToCloudinary = async (
         cloudinary.uploader.upload_stream(
             {
                 resource_type: "auto",
-                public_id: `ph-healthcare/${folder}/${uniqueName}`,
-                folder: `ph-healthcare/${folder}`,
+                public_id: `wellnexus/${folder}/${uniqueName}`,
+                folder: `wellnexus/${folder}`,
             },
             (error, result) => {
                 if (error) {
