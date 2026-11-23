@@ -14,14 +14,18 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { useState } from "react";
 
-const LoginForm = () => {
+interface LoginFormProps {
+    redirectPath?: string;
+}
+
+const LoginForm = ({ redirectPath }: LoginFormProps) => {
     // const queryClient = useQueryClient();
 
     const [serverError, setServerError] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
 
     const { mutateAsync, isPending } = useMutation({
-        mutationFn: (payload: ILoginPayload) => loginAction(payload),
+        mutationFn: (payload: ILoginPayload) => loginAction(payload, redirectPath),
     })
 
     const form = useForm({
@@ -130,7 +134,7 @@ const LoginForm = () => {
                         selector={(s) => [s.canSubmit, s.isSubmitting] as const}
                     >
                         {([canSubmit, isSubmitting]) => (
-                            <AppSubmitButton isPending={isSubmitting || isPending} pendingLabel="Logging in...." disabled={!canSubmit}>
+                            <AppSubmitButton isPending={isSubmitting || isPending} pendingLabel="Logging In...." disabled={!canSubmit}>
                                 Log In
                             </AppSubmitButton>
                         )}
@@ -150,10 +154,10 @@ const LoginForm = () => {
 
                 <Button variant="outline" className="w-full" onClick={() => {
                     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+                    //TODO redirect path after login in frontend
                     redirect(`${baseUrl}/auth/login/google`);
                     // window.location.href = `${baseUrl}/auth/login/google`;
                 }}>
-                    {/* This svg is Google Logo */}
                     <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                         <path
                             fill="currentColor"

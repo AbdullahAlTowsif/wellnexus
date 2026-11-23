@@ -3,7 +3,7 @@
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { setCookie } from "./cookieUtils";
 
-
+// Calculate the number of seconds remaining until the token expires
 const getTokenSecondsRemaining = (token: string): number => {
     if (!token) return 0;
     try {
@@ -30,6 +30,7 @@ export const setTokenInCookies = async (
 ) => {
     let maxAgeInSeconds;
 
+    // If the token is not the session token, calculate its remaining time to set as maxAge
     if (name !== "better-auth.session_token") {
         maxAgeInSeconds = getTokenSecondsRemaining(token);
     }

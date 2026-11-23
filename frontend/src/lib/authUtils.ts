@@ -83,15 +83,16 @@ export const getDefaultDashboardRoute = (role: UserRole) => {
 
 export const isValidRedirectForRole = (redirectPath: string, role: UserRole) => {
     const unifySuperAdminAndAdminRole = role === "SUPER_ADMIN" ? "ADMIN" : role;
-
     role = unifySuperAdminAndAdminRole;
 
     const routeOwner = getRouteOwner(redirectPath);
 
+    // If the route is public (routeOwner is null) or common (routeOwner is "COMMON"), it's valid for any role
     if (routeOwner === null || routeOwner === "COMMON") {
         return true;
     }
 
+    // If the route owner matches the user's role, it's valid
     if (routeOwner === role) {
         return true;
     }
