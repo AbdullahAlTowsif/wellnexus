@@ -1,0 +1,48 @@
+"use client"
+
+import AppointmentBarChart from "@/components/shared/AppointmentBarChart"
+import AppointmentPieChart from "@/components/shared/AppointmentPieChart"
+import StatsCard from "@/components/shared/StatsCard"
+import { getDashboardData } from "@/services/dashboard.services"
+import { ApiResponse } from "@/types/api.types"
+import { IAdminDashboardData } from "@/types/dashboard.types"
+import { useQuery } from "@tanstack/react-query"
+
+const AdminDashboardContent = () => {
+    const { data: adminDashboardData } = useQuery({
+        queryKey: ["admin-dashboard-data"],
+        queryFn: getDashboardData,
+        // we did not use this in the page file because it was a server component and we wanted to prefetch the data on the server side, but here we are in a client component so we can use it
+        refetchOnWindowFocus: "always" // Refetch the data when the window regains focus
+    })
+
+    const { data } = adminDashboardData as ApiResponse<IAdminDashboardData>;
+
+    console.log(data);
+    return (
+        <div className="space-y-4">
+            <StatsCard
+                title="Total Appointments"
+                value={data?.appointmentCount || 0}
+                iconName="CalendarDays"
+                description="Number of appointments scheduled"
+            />
+            <StatsCard
+                title="Total Patients"
+                value={data?.patientCount || 0}
+                iconName="Users"
+                description="Number of patients registered"
+            />
+
+            <AppointmentBarChart
+                data={data?.barChartData || []}
+            />
+
+            <AppointmentPieChart
+                data={data?.pieChartData || []}
+            />
+        </div>
+    )
+}
+
+export default AdminDashboardContent;
