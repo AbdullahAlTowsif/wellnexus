@@ -1,17 +1,41 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { tableFeatures, useTable } from "@tanstack/react-table";
-import type { ColumnDef, RowData } from "@tanstack/react-table";
-import { MoreHorizontal } from "lucide-react";
+import { PaginationMeta } from "@/types/api.types";
+import {
+    createPaginatedRowModel,
+    createSortedRowModel,
+    rowPaginationFeature,
+    rowSortingFeature,
+    tableFeatures,
+    useTable,
+} from "@tanstack/react-table";
+import type { ColumnDef, PaginationState, RowData, SortingState } from "@tanstack/react-table";
+import { ArrowDown, ArrowUp, ArrowUpDown, MoreHorizontal } from "lucide-react";
+import { useSyncExternalStore } from "react";
+import DataTableFilters, {
+    DataTableFilterConfig,
+    DataTableFilterValue,
+    DataTableFilterValues,
+} from "./DataTableFilters";
+import DataTablePagination from "./DataTablePagination";
+import DataTableSearch from "./DataTableSearch";
 
-// No extra table features yet (core row model is built in).
-// Exported so consumers can type their column definitions against it.
-export const dataTableFeatures = tableFeatures({});
+// v9: features and their row models are registered together (module scope = stable reference)
+export const dataTableFeatures = tableFeatures({
+    rowSortingFeature,
+    sortedRowModel: createSortedRowModel(),
+    rowPaginationFeature,
+    paginatedRowModel: createPaginatedRowModel(),
+});
 export type DataTableFeatures = typeof dataTableFeatures;
-
-// Convenience alias so callers can write DataTableColumnDef<IDoctor>[]
 export type DataTableColumnDef<TData extends RowData> = ColumnDef<DataTableFeatures, TData>;
+
+const subscribeToNothing = () => () => { };
+const getClientHydrationSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
 
 interface DataTableActions<TData> {
     onView?: (data: TData) => void;
@@ -23,19 +47,62 @@ interface DataTableProps<TData extends RowData> {
     data: TData[];
     columns: DataTableColumnDef<TData>[];
     actions?: DataTableActions<TData>;
+    toolbarAction?: React.ReactNode;
     emptyMessage?: string;
     isLoading?: boolean;
+    sorting?: {
+        state: SortingState;
+        onSortingChange: (state: SortingState) => void;
+    };
+    pagination?: {
+        state: PaginationState;
+        onPaginationChange: (state: PaginationState) => void;
+    };
+    search?: {
+        initialValue?: string;
+        placeholder?: string;
+        debounceMs?: number;
+        onDebouncedChange: (value: string) => void;
+    };
+    filters?: {
+        configs: DataTableFilterConfig[];
+        values: DataTableFilterValues;
+        onFilterChange: (filterId: string, value: DataTableFilterValue | undefined) => void;
+        onClearAll?: () => void;
+    };
+    meta?: PaginationMeta;
 }
 
-const DataTable = <TData extends RowData>({ data, columns, actions, emptyMessage, isLoading }: DataTableProps<TData>) => {
+const DataTable = <TData extends RowData,>({
+    data,
+    columns,
+    actions,
+    toolbarAction,
+    emptyMessage,
+    isLoading,
+    sorting,
+    pagination,
+    search,
+    filters,
+    meta,
+}: DataTableProps<TData>) => {
+    const hasHydrated = useSyncExternalStore(
+        subscribeToNothing,
+        getClientHydrationSnapshot,
+        getServerHydrationSnapshot,
+    );
+
+    const showLoadingOverlay = Boolean(isLoading) && hasHydrated;
+
     const tableColumns: DataTableColumnDef<TData>[] = actions
         ? [
             ...columns,
 
             // Action column
             {
-                id: "actions", // Unique id for the column
+                id: "actions",
                 header: "Actions",
+                enableSorting: false,
                 cell: ({ row }) => {
                     const rowData = row.original;
 
@@ -56,13 +123,11 @@ const DataTable = <TData extends RowData>({ data, columns, actions, emptyMessage
                                         View
                                     </DropdownMenuItem>
                                 )}
-
                                 {actions.onEdit && (
                                     <DropdownMenuItem onClick={() => actions.onEdit?.(rowData)}>
                                         Edit
                                     </DropdownMenuItem>
                                 )}
-
                                 {actions.onDelete && (
                                     <DropdownMenuItem onClick={() => actions.onDelete?.(rowData)}>
                                         Delete
@@ -77,16 +142,36 @@ const DataTable = <TData extends RowData>({ data, columns, actions, emptyMessage
         : columns;
 
     const table = useTable({
+        key: "data-table", // for devtools; safe to omit
         features: dataTableFeatures,
-        columns: tableColumns,
         data,
+        columns: tableColumns,
+        manualSorting: !!sorting,
+        manualPagination: !!pagination,
+        pageCount: pagination ? Math.max(meta?.totalPages ?? 0, 0) : undefined,
+        state: {
+            ...(sorting ? { sorting: sorting.state } : {}),
+            ...(pagination ? { pagination: pagination.state } : {}),
+        },
+        onSortingChange: sorting
+            ? (updater) => {
+                const next = typeof updater === "function" ? updater(sorting.state) : updater;
+                sorting.onSortingChange(next);
+            }
+            : undefined,
+        onPaginationChange: pagination
+            ? (updater) => {
+                const next = typeof updater === "function" ? updater(pagination.state) : updater;
+                pagination.onPaginationChange(next);
+            }
+            : undefined,
     });
 
     const rows = table.getRowModel().rows;
 
     return (
         <div className="relative">
-            {isLoading && (
+            {showLoadingOverlay && (
                 <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-10 flex items-center justify-center">
                     <div className="flex items-center gap-2">
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -95,7 +180,33 @@ const DataTable = <TData extends RowData>({ data, columns, actions, emptyMessage
                 </div>
             )}
 
-            {/* Table */}
+            {(search || filters || toolbarAction) && (
+                <div className="mb-4 flex flex-wrap items-start gap-3">
+                    {search && (
+                        <DataTableSearch
+                            key={search.initialValue ?? ""}
+                            initialValue={search.initialValue}
+                            placeholder={search.placeholder}
+                            debounceMs={search.debounceMs}
+                            onDebouncedChange={search.onDebouncedChange}
+                            isLoading={isLoading}
+                        />
+                    )}
+
+                    {filters && (
+                        <DataTableFilters
+                            filters={filters.configs}
+                            values={filters.values}
+                            onFilterChange={filters.onFilterChange}
+                            onClearAll={filters.onClearAll}
+                            isLoading={isLoading}
+                        />
+                    )}
+
+                    {toolbarAction && <div className="ml-auto shrink-0">{toolbarAction}</div>}
+                </div>
+            )}
+
             <div className="rounded-lg border">
                 <Table>
                     <TableHeader>
@@ -103,7 +214,23 @@ const DataTable = <TData extends RowData>({ data, columns, actions, emptyMessage
                             <TableRow key={headerGroup.id}>
                                 {headerGroup.headers.map((header) => (
                                     <TableHead key={header.id}>
-                                        {header.isPlaceholder ? null : (
+                                        {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                                            <Button
+                                                variant={"ghost"}
+                                                className="h-auto cursor-pointer p-0 font-semibold hover:bg-transparent hover:text-inherit focus-visible:ring-0"
+                                                onClick={header.column.getToggleSortingHandler()}
+                                            >
+                                                <table.FlexRender header={header} />
+
+                                                {header.column.getIsSorted() === "asc" ? (
+                                                    <ArrowUp className="ml-1 h-4 w-4" />
+                                                ) : header.column.getIsSorted() === "desc" ? (
+                                                    <ArrowDown className="ml-1 h-4 w-4" />
+                                                ) : (
+                                                    <ArrowUpDown className="ml-1 h-4 w-4 opacity-50" />
+                                                )}
+                                            </Button>
+                                        ) : (
                                             <table.FlexRender header={header} />
                                         )}
                                     </TableHead>
@@ -131,6 +258,15 @@ const DataTable = <TData extends RowData>({ data, columns, actions, emptyMessage
                         )}
                     </TableBody>
                 </Table>
+
+                {pagination && (
+                    <DataTablePagination
+                        table={table}
+                        totalPages={meta?.totalPages}
+                        totalRows={meta?.total}
+                        isLoading={isLoading}
+                    />
+                )}
             </div>
         </div>
     );
