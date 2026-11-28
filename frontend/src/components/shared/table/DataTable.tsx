@@ -5,14 +5,22 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PaginationMeta } from "@/types/api.types";
 import {
+    ColumnDef,
     createPaginatedRowModel,
     createSortedRowModel,
+    functionalUpdate,
+    PaginationState,
+    RowData,
     rowPaginationFeature,
     rowSortingFeature,
+    sortFn_alphanumeric,
+    sortFn_datetime,
+    sortFn_text,
+    SortingState,
     tableFeatures,
+    Updater,
     useTable,
 } from "@tanstack/react-table";
-import type { ColumnDef, PaginationState, RowData, SortingState } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ArrowUpDown, MoreHorizontal } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import DataTableFilters, {
@@ -23,15 +31,26 @@ import DataTableFilters, {
 import DataTablePagination from "./DataTablePagination";
 import DataTableSearch from "./DataTableSearch";
 
-// v9: features and their row models are registered together (module scope = stable reference)
+// v9: features are declared once, outside the component, so the reference is stable.
 export const dataTableFeatures = tableFeatures({
     rowSortingFeature,
-    sortedRowModel: createSortedRowModel(),
     rowPaginationFeature,
+    sortedRowModel: createSortedRowModel(),
     paginatedRowModel: createPaginatedRowModel(),
+    sortFns: {
+        alphanumeric: sortFn_alphanumeric,
+        datetime: sortFn_datetime,
+        text: sortFn_text,
+    },
 });
+
 export type DataTableFeatures = typeof dataTableFeatures;
+
+// Use this type in your column files.
 export type DataTableColumnDef<TData extends RowData> = ColumnDef<DataTableFeatures, TData>;
+
+// Stable fallback, so a missing `data` prop doesn't create a new array on every render.
+// const EMPTY_DATA: never[] = [];
 
 const subscribeToNothing = () => () => { };
 const getClientHydrationSnapshot = () => true;
@@ -73,8 +92,8 @@ interface DataTableProps<TData extends RowData> {
     meta?: PaginationMeta;
 }
 
-const DataTable = <TData extends RowData,>({
-    data,
+const DataTable = <TData extends RowData>({
+    data = [] as TData[],
     columns,
     actions,
     toolbarAction,
@@ -97,10 +116,9 @@ const DataTable = <TData extends RowData,>({
     const tableColumns: DataTableColumnDef<TData>[] = actions
         ? [
             ...columns,
-
             // Action column
             {
-                id: "actions",
+                id: "actions", // Unique id for the column
                 header: "Actions",
                 enableSorting: false,
                 cell: ({ row }) => {
@@ -123,11 +141,13 @@ const DataTable = <TData extends RowData,>({
                                         View
                                     </DropdownMenuItem>
                                 )}
+
                                 {actions.onEdit && (
                                     <DropdownMenuItem onClick={() => actions.onEdit?.(rowData)}>
                                         Edit
                                     </DropdownMenuItem>
                                 )}
+
                                 {actions.onDelete && (
                                     <DropdownMenuItem onClick={() => actions.onDelete?.(rowData)}>
                                         Delete
@@ -142,7 +162,6 @@ const DataTable = <TData extends RowData,>({
         : columns;
 
     const table = useTable({
-        key: "data-table", // for devtools; safe to omit
         features: dataTableFeatures,
         data,
         columns: tableColumns,
@@ -153,21 +172,21 @@ const DataTable = <TData extends RowData,>({
             ...(sorting ? { sorting: sorting.state } : {}),
             ...(pagination ? { pagination: pagination.state } : {}),
         },
-        onSortingChange: sorting
-            ? (updater) => {
-                const next = typeof updater === "function" ? updater(sorting.state) : updater;
-                sorting.onSortingChange(next);
+        // Add the handlers only when controlled. Passing `undefined` would
+        // overwrite the table's built-in state updater.
+        ...(sorting
+            ? {
+                onSortingChange: (updater: Updater<SortingState>) =>
+                    sorting.onSortingChange(functionalUpdate(updater, sorting.state)),
             }
-            : undefined,
-        onPaginationChange: pagination
-            ? (updater) => {
-                const next = typeof updater === "function" ? updater(pagination.state) : updater;
-                pagination.onPaginationChange(next);
+            : {}),
+        ...(pagination
+            ? {
+                onPaginationChange: (updater: Updater<PaginationState>) =>
+                    pagination.onPaginationChange(functionalUpdate(updater, pagination.state)),
             }
-            : undefined,
+            : {}),
     });
-
-    const rows = table.getRowModel().rows;
 
     return (
         <div className="relative">
@@ -203,16 +222,19 @@ const DataTable = <TData extends RowData,>({
                         />
                     )}
 
-                    {toolbarAction && <div className="ml-auto shrink-0">{toolbarAction}</div>}
+                    {toolbarAction && (
+                        <div className="ml-auto shrink-0">{toolbarAction}</div>
+                    )}
                 </div>
             )}
 
+            {/* Table */}
             <div className="rounded-lg border">
                 <Table>
                     <TableHeader>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                            <TableRow key={headerGroup.id}>
-                                {headerGroup.headers.map((header) => (
+                        {table.getHeaderGroups().map((hg) => (
+                            <TableRow key={hg.id}>
+                                {hg.headers.map((header) => (
                                     <TableHead key={header.id}>
                                         {header.isPlaceholder ? null : header.column.getCanSort() ? (
                                             <Button
@@ -239,8 +261,8 @@ const DataTable = <TData extends RowData,>({
                         ))}
                     </TableHeader>
                     <TableBody>
-                        {rows.length ? (
-                            rows.map((row) => (
+                        {table.getRowModel().rows.length ? (
+                            table.getRowModel().rows.map((row) => (
                                 <TableRow key={row.id}>
                                     {row.getAllCells().map((cell) => (
                                         <TableCell key={cell.id}>
